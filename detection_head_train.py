@@ -1,3 +1,4 @@
+import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.transforms import functional as F
