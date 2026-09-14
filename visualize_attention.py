@@ -119,7 +119,7 @@ if __name__ == '__main__':
     model.eval()
     model.to(device)
     if os.path.isfile(args.pretrained_weights):
-        state_dict = torch.load(args.pretrained_weights, map_location="cpu")
+        state_dict = torch.load(args.pretrained_weights, map_location="cpu", weights_only=False)
         if args.checkpoint_key is not None and args.checkpoint_key in state_dict:
             print(f"Take key {args.checkpoint_key} in provided checkpoint dict")
             state_dict = state_dict[args.checkpoint_key]

@@ -1,3 +1,5 @@
+# Sources: Claude to help with implentation/connecting swin transformer implentation into DINO
+
 # Copyright (c) Facebook, Inc. and its affiliates.
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +31,11 @@ import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision import models as torchvision_models
+from peft import get_peft_model, LoraConfig
 
 import utils
 import vision_transformer as vits
+import swin_transformer as swins
 from vision_transformer import DINOHead
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
@@ -43,26 +47,42 @@ def get_args_parser():
 
     # Model parameters
     parser.add_argument('--arch', default='vit_small', type=str,
-        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small'] \
+        choices=['vit_tiny', 'vit_small', 'vit_base', 'xcit', 'deit_tiny', 'deit_small',
+                 "swin_tiny"] \
                 + torchvision_archs + torch.hub.list("facebookresearch/xcit:main"),
         help="""Name of architecture to train. For quick experiments with ViTs,
         we recommend using vit_tiny or vit_small.""")
+
+    parser.add_argument('--window_size', default=7, type=int, help="Swin attention window (ignored for ViT).")
+
+    parser.add_argument('--in_chans', default=3, type=int, help="Number of channels for image (ex: RGB = 3, Grayscale = 1 )")
+
+    parser.add_argument('--use_dense_prediction', default=False, type=utils.bool_flag,
+        help="Use the hierarchical multi-scale DINO loss (Swin only).")
+
     parser.add_argument('--patch_size', default=16, type=int, help="""Size in pixels
         of input square patches - default 16 (for 16x16 patches). Using smaller
         values leads to better performance but requires more memory. Applies only
         for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling
         mixed precision training (--use_fp16 false) to avoid unstabilities.""")
+
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
+
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
         help="""Whether or not to weight normalize the last layer of the DINO head.
         Not normalizing leads to better performance but can make the training unstable.
         In our experiments, we typically set this paramater to False with vit_small and True with vit_base.""")
+
     parser.add_argument('--momentum_teacher', default=0.996, type=float, help="""Base EMA
         parameter for teacher update. The value is increased to 1 during training with cosine schedule.
         We recommend setting a higher value with small batches: for example use 0.9995 with batch size of 256.""")
-    parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag,
-        help="Whether to use batch normalizations in projection head (Default: False)")
+
+    parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag, help="Whether to use batch normalizations in projection head (Default: False)")
+
+    parser.add_argument('--pretrained', default=True, type=utils.bool_flag, help="Whether to use pretrained weights (Default: True)")
+
+    parser.add_argument('--pretrained_path', default='', type=str, help="Weights to load into model (Default: '')")
 
     # Temperature teacher parameters
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
@@ -103,6 +123,9 @@ def get_args_parser():
     parser.add_argument('--optimizer', default='adamw', type=str,
         choices=['adamw', 'sgd', 'lars'], help="""Type of optimizer. We recommend using adamw with ViTs.""")
     parser.add_argument('--drop_path_rate', type=float, default=0.1, help="stochastic depth rate")
+
+    # loRA
+    parser.add_argument('--use_lora', default=True, type=utils.bool_flag, help='Whether to use LoRa for fine-tuning or not')
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
@@ -157,20 +180,51 @@ def train_dino(args):
     # ============ building student and teacher networks ... ============
     # we changed the name DeiT-S for ViT-S to avoid confusions
     args.arch = args.arch.replace("deit", "vit")
+
     # if the network is a Vision Transformer (i.e. vit_tiny, vit_small, vit_base)
     if args.arch in vits.__dict__.keys():
         student = vits.__dict__[args.arch](
             patch_size=args.patch_size,
+            in_chans=args.in_chans,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
+            pretrained=args.pretrained,
+            pretrained_path="weights/" + args.pretrained_path,
         )
-        teacher = vits.__dict__[args.arch](patch_size=args.patch_size)
+        teacher = vits.__dict__[args.arch](
+            patch_size=args.patch_size,
+            in_chans=args.in_chans,
+        )
         embed_dim = student.embed_dim
+
+    # if the network is a hierarchical Swin Transformer (i.e. swin_tiny, swin_small, swin_base)
+    elif args.arch in swins.__dict__.keys():
+        student = swins.__dict__[args.arch](
+            patch_size=args.patch_size,
+            in_chans=args.in_chans,
+            window_size=args.window_size,
+            drop_path_rate=args.drop_path_rate,  # stochastic depth
+            use_dense_prediction=args.use_dense_prediction,
+            pretrained=args.pretrained,
+            pretrained_path="weights/" + args.pretrained_path,
+        )
+        teacher = swins.__dict__[args.arch](
+            patch_size=args.patch_size,
+            in_chans=args.in_chans,
+            window_size=args.window_size,
+            use_dense_prediction=args.use_dense_prediction,
+        )
+        # final-stage width; used as the DINOHead input dim when --use_dense_prediction is False
+        embed_dim = student.num_features
+        # per-stage widths, e.g. [96, 192, 384, 768] for swin_tiny; used when --use_dense_prediction is True
+        embed_dims = student.embed_dims
+
     # if the network is a XCiT
     elif args.arch in torch.hub.list("facebookresearch/xcit:main"):
         student = torch.hub.load('facebookresearch/xcit:main', args.arch,
                                  pretrained=False, drop_path_rate=args.drop_path_rate)
         teacher = torch.hub.load('facebookresearch/xcit:main', args.arch, pretrained=False)
         embed_dim = student.embed_dim
+
     # otherwise, we check if the architecture is in torchvision models
     elif args.arch in torchvision_models.__dict__.keys():
         student = torchvision_models.__dict__[args.arch]()
@@ -179,19 +233,64 @@ def train_dino(args):
     else:
         print(f"Unknow architecture: {args.arch}")
 
-    # multi-crop wrapper handles forward with inputs of different resolutions
-    student = utils.MultiCropWrapper(student, DINOHead(
-        embed_dim,
-        args.out_dim,
-        use_bn=args.use_bn_in_head,
-        norm_last_layer=args.norm_last_layer,
-    ))
-    teacher = utils.MultiCropWrapper(
-        teacher,
-        DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
-    )
+    if args.use_lora:
+            # target_models = ["qkv"] if "vit" in args.arch or "deit" in args.arch else ["query", "value"]
+            target_models = ["qkv", "proj"]
+            # target_modules = ["qkv", "proj", "fc1", "fc2"]
+    
+            lora_config = LoraConfig(
+                r = 16,
+                lora_alpha=32,
+                lora_dropout=0.05,
+                target_modules=target_models,
+                bias="none"
+            )
+    
+            student = get_peft_model(student, lora_config)
+            teacher = get_peft_model(teacher, lora_config)
+            teacher.load_state_dict(student.state_dict())
+
+            # for name, module in student.named_modules():
+            #     if isinstance(module, nn.Linear):
+            #         print(name)
+
+
+    if args.use_dense_prediction:
+        assert args.arch in swins.__dict__.keys(), \
+            "--use_dense_prediction (hierarchical multi-scale loss) currently requires a Swin architecture."
+        # one DINOHead per pyramid stage, since each stage has a different input channel width.
+        # Both student and teacher list-comprehensions iterate over the SAME `embed_dims` list
+        # (read from the student backbone above), so stage index i means the same pyramid stage
+        # in both the student's and teacher's head lists.
+        student = utils.MultiCropWrapper(student, nn.ModuleList([
+            DINOHead(
+                dim,
+                args.out_dim,
+                use_bn=args.use_bn_in_head,
+                norm_last_layer=args.norm_last_layer,
+            ) for dim in embed_dims
+        ]), multiscale=True)
+
+        teacher = utils.MultiCropWrapper(teacher, nn.ModuleList([
+            DINOHead(dim, args.out_dim, args.use_bn_in_head) for dim in embed_dims
+        ]), multiscale=True)
+    else:
+        # multi-crop wrapper handles forward with inputs of different resolutions
+        student = utils.MultiCropWrapper(student, DINOHead(
+            embed_dim,
+            args.out_dim,
+            use_bn=args.use_bn_in_head,
+            norm_last_layer=args.norm_last_layer,
+        ))
+
+        teacher = utils.MultiCropWrapper(
+            teacher,
+            DINOHead(embed_dim, args.out_dim, args.use_bn_in_head),
+        )
+
     # move networks to gpu
     student, teacher = student.cuda(), teacher.cuda()
+
     # synchronize batch norms (if any)
     if utils.has_batchnorms(student):
         student = nn.SyncBatchNorm.convert_sync_batchnorm(student)
@@ -203,23 +302,37 @@ def train_dino(args):
     else:
         # teacher_without_ddp and teacher are the same thing
         teacher_without_ddp = teacher
+
     student = nn.parallel.DistributedDataParallel(student, device_ids=[args.gpu])
+    
     # teacher and student start with the same weights
     teacher_without_ddp.load_state_dict(student.module.state_dict())
+
     # there is no backpropagation through the teacher, so no need for gradients
     for p in teacher.parameters():
         p.requires_grad = False
     print(f"Student and Teacher are built: they are both {args.arch} network.")
 
     # ============ preparing loss ... ============
-    dino_loss = DINOLoss(
-        args.out_dim,
-        args.local_crops_number + 2,  # total number of crops = 2 global crops + local_crops_number
-        args.warmup_teacher_temp,
-        args.teacher_temp,
-        args.warmup_teacher_temp_epochs,
-        args.epochs,
-    ).cuda()
+    if args.use_dense_prediction:
+        dino_loss = MultiScaleDINOLoss(
+            args.out_dim,
+            len(embed_dims), # one loss term (with its own EMA center) per pyramid stage
+            args.local_crops_number + 2, # total number of crops = 2 global crops + local_crops_number
+            args.warmup_teacher_temp,
+            args.teacher_temp,
+            args.warmup_teacher_temp_epochs,
+            args.epochs,
+        ).cuda()
+    else:
+        dino_loss = DINOLoss(
+            args.out_dim,
+            args.local_crops_number + 2,  # total number of crops = 2 global crops + local_crops_number
+            args.warmup_teacher_temp,
+            args.teacher_temp,
+            args.warmup_teacher_temp_epochs,
+            args.epochs,
+        ).cuda()
 
     # ============ preparing optimizer ... ============
     params_groups = utils.get_params_groups(student)
@@ -254,7 +367,7 @@ def train_dino(args):
     # ============ optionally resume training ... ============
     to_restore = {"epoch": 0}
     utils.restart_from_checkpoint(
-        os.path.join(args.output_dir, "checkpoint.pth"),
+        os.path.join(args.output_dir, "checkpoints/checkpoint.pth"),
         run_variables=to_restore,
         student=student,
         teacher=teacher,
@@ -344,10 +457,67 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
             fp16_scaler.update()
 
         # EMA update for the teacher
+
+        # TODO Delete this commeted out code
+        # with torch.no_grad():
+        #     m = momentum_schedule[it]  # momentum parameter
+        #     for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
+        #         param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
+        # student_params = dict(student.module.named_parameters())
+        # teacher_params = dict(teacher_without_ddp.named_parameters())
+
+        # with torch.no_grad():
+        #     m = momentum_schedule[it]
+
+        #     for name, param_q in student_params.items():
+
+        #         if name not in teacher_params:
+        #             continue
+
+        #         param_k = teacher_params[name]
+
+        #         param_k.data.mul_(m).add_(
+        #             (1.0 - m) * param_q.detach().data
+        #         )
+
+        # with torch.no_grad():
+        #     m = momentum_schedule[it]
+
+        #     student_params = dict(student.module.named_parameters())
+        #     teacher_params = dict(teacher_without_ddp.named_parameters())
+
+        #     for name, param_q in student_params.items():
+        #         if "lora_" in name:
+        #             param_k = teacher_params[name]
+        #             param_k.data.mul_(m).add_(
+        #                 param_q.detach().data,
+        #                 alpha=1.0 - m
+        #             )
+
         with torch.no_grad():
-            m = momentum_schedule[it]  # momentum parameter
-            for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
-                param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
+            m = momentum_schedule[it]
+
+            student_params = dict(student.module.named_parameters())
+            teacher_params = dict(teacher_without_ddp.named_parameters())
+
+            for name, param_q in student_params.items():
+
+                # Frozen Swin parameters are not updated.
+                # Trainable LoRA + DINO head parameters are updated.
+                if not param_q.requires_grad:
+                    continue
+
+                if name not in teacher_params:
+                    raise RuntimeError(
+                        f"Student parameter missing from teacher: {name}"
+                    )
+
+                param_k = teacher_params[name]
+
+                param_k.data.mul_(m).add_(
+                    param_q.detach().data,
+                    alpha=1.0 - m
+                )
 
         # logging
         torch.cuda.synchronize()
@@ -372,8 +542,7 @@ class DINOLoss(nn.Module):
         # we apply a warm up for the teacher temperature because
         # a too high temperature makes the training instable at the beginning
         self.teacher_temp_schedule = np.concatenate((
-            np.linspace(warmup_teacher_temp,
-                        teacher_temp, warmup_teacher_temp_epochs),
+            np.linspace(warmup_teacher_temp, teacher_temp, warmup_teacher_temp_epochs),
             np.ones(nepochs - warmup_teacher_temp_epochs) * teacher_temp
         ))
 
@@ -415,15 +584,69 @@ class DINOLoss(nn.Module):
         # ema update
         self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)
 
+# 
+# Source: https://github.com/microsoft/esvit
+# @article{li2021esvit,
+#   title={Efficient Self-supervised Vision Transformers for Representation Learning},
+#   author={Li, Chunyuan and Yang, Jianwei and Zhang, Pengchuan and Gao, Mei and Xiao, Bin and Dai, Xiyang and Yuan, Lu and Gao, Jianfeng},
+#   journal={International Conference on Learning Representations (ICLR)},
+#   year={2022}
+# }
+# 
+class MultiScaleDINOLoss(nn.Module):
+    def __init__(self, out_dim, num_scales, ncrops, warmup_teacher_temp, teacher_temp,
+                 warmup_teacher_temp_epochs, nepochs, student_temp=0.1,
+                 center_momentum=0.9, scale_weights=None):
+        super().__init__()
+        self.student_temp = student_temp
+        self.center_momentum = center_momentum
+        self.ncrops = ncrops
+        self.num_scales = num_scales
+        self.scale_weights = scale_weights if scale_weights is not None else [1.0] * num_scales
+        self.register_buffer("center", torch.zeros(num_scales, 1, out_dim))
+        self.teacher_temp_schedule = teacher_temp = np.concatenate((
+            np.linspace(warmup_teacher_temp, teacher_temp, warmup_teacher_temp_epochs),
+            np.ones(nepochs - warmup_teacher_temp_epochs) * teacher_temp))
+
+    def forward(self, student_output, teacher_output, epoch):
+        temp = self.teacher_temp_schedule[epoch]
+        total_loss = 0.0
+
+        for scale in range(self.num_scales):
+            student_out = (student_output[scale] / self.student_temp).chunk(self.ncrops)
+            teacher_out = F.softmax((teacher_output[scale] - self.center[scale]) / temp, dim=1).detach().chunk(2)
+            # teacher_out = teacher_out.detach().chunk(2)
+
+            scale_loss, n_loss_term = 0.0, 0
+            for iq, q in enumerate(teacher_out):
+                for v in range(len(student_out)):
+                    if v == iq:
+                        continue
+                    loss = torch.sum(-q * F.log_softmax(student_out[v], dim=-1), dim=-1)
+                    scale_loss += loss.mean()
+                    n_loss_term += 1
+
+            scale_loss /= n_loss_term
+            total_loss += self.scale_weights[scale] * scale_loss
+            self.update_center(scale, teacher_output[scale])
+
+        return total_loss / sum(self.scale_weights)
+
+    @torch.no_grad()
+    def update_center(self, scale_idx, teacher_output):
+        batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
+        dist.all_reduce(batch_center)
+        batch_center = batch_center / (len(teacher_output) * dist.get_world_size())
+        self.center[scale_idx] = self.center[scale_idx] * self.center_momentum + batch_center * (1 - self.center_momentum)
 
 class DataAugmentationDINO(object):
     def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
-        flip_and_color_jitter = transforms.Compose([
+        flip = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomApply(
-                [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                p=0.8
-            ),
+            # transforms.RandomApply(
+            #     [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+            #     p=0.8
+            # ),
             transforms.RandomGrayscale(p=0.2),
         ])
         normalize = transforms.Compose([
@@ -434,23 +657,25 @@ class DataAugmentationDINO(object):
         # first global crop
         self.global_transfo1 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+            flip,
             utils.GaussianBlur(1.0),
             normalize,
         ])
+
         # second global crop
         self.global_transfo2 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+            flip,
             utils.GaussianBlur(0.1),
             utils.Solarization(0.2),
             normalize,
         ])
+
         # transformation for the local small crops
         self.local_crops_number = local_crops_number
         self.local_transfo = transforms.Compose([
             transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),
-            flip_and_color_jitter,
+            flip,
             utils.GaussianBlur(p=0.5),
             normalize,
         ])

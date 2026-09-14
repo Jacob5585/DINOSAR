@@ -70,7 +70,7 @@ class Solarization(object):
 
 def load_pretrained_weights(model, pretrained_weights, checkpoint_key, model_name, patch_size):
     if os.path.isfile(pretrained_weights):
-        state_dict = torch.load(pretrained_weights, map_location="cpu")
+        state_dict = torch.load(pretrained_weights, map_location="cpu", weights_only=False)
         if checkpoint_key is not None and checkpoint_key in state_dict:
             print(f"Take key {checkpoint_key} in provided checkpoint dict")
             state_dict = state_dict[checkpoint_key]
@@ -600,12 +600,16 @@ class MultiCropWrapper(nn.Module):
     concatenate all the output features and run the head forward on these
     concatenated features.
     """
-    def __init__(self, backbone, head):
+    def __init__(self, backbone, head, multiscale=False):
         super(MultiCropWrapper, self).__init__()
         # disable layers dedicated to ImageNet labels classification
         backbone.fc, backbone.head = nn.Identity(), nn.Identity()
         self.backbone = backbone
         self.head = head
+        self.multiscale = multiscale
+
+        if self.multiscale and not isinstance(head, nn.ModuleList):
+            raise ValueError("multiscale=True requires `head` to be an nn.ModuleList (one head per pyramid stage).")
 
     def forward(self, x):
         # convert to list
@@ -615,19 +619,34 @@ class MultiCropWrapper(nn.Module):
             torch.tensor([inp.shape[-1] for inp in x]),
             return_counts=True,
         )[1], 0)
-        start_idx, output = 0, torch.empty(0).to(x[0].device)
-        for end_idx in idx_crops:
-            _out = self.backbone(torch.cat(x[start_idx: end_idx]))
-            # The output is a tuple with XCiT model. See:
-            # https://github.com/facebookresearch/xcit/blob/master/xcit.py#L404-L405
-            if isinstance(_out, tuple):
-                _out = _out[0]
-            # accumulate outputs
-            output = torch.cat((output, _out))
-            start_idx = end_idx
-        # Run the head forward on the concatenated features.
-        return self.head(output)
 
+        if not self.multiscale:
+            start_idx, output = 0, torch.empty(0).to(x[0].device)
+
+            for end_idx in idx_crops:
+                _out = self.backbone(torch.cat(x[start_idx: end_idx]))
+                # The output is a tuple with XCiT model. See:
+                # https://github.com/facebookresearch/xcit/blob/master/xcit.py#L404-L405
+                if isinstance(_out, tuple):
+                    _out = _out[0]
+                # accumulate outputs
+                output = torch.cat((output, _out))
+                start_idx = end_idx
+            # Run the head forward on the concatenated features.
+            return self.head(output)
+
+        elif self.multiscale:
+            start_idx, per_stage_chunks = 0, None
+
+            for end_idx in idx_crops:
+                _out = self.backbone.forward_features(torch.cat(x[start_idx: end_idx]), return_all_stages=True)
+                if per_stage_chunks is None:
+                    per_stage_chunks = [[] for _ in range(len(_out))]
+                for i, stage_feat in enumerate(_out):
+                    per_stage_chunks[i].append(stage_feat)
+                start_idx = end_idx
+
+            return [self.head[i](torch.cat(chunks)) for i, chunks in enumerate(per_stage_chunks)]
 
 def get_params_groups(model):
     regularized = []
