@@ -5,7 +5,7 @@ import json
 
 # Download
 dest_path = "datasets"
-path = kagglehub.dataset_download("greatbird/sardet-100k", dest_path)
+path = kagglehub.dataset_download("greatbird/sardet-100k", output_dir=dest_path)
 
 train_path = f"{dest_path}/SARDet_100K/JPEGImages/train"
 val_path = f"{dest_path}/SARDet_100K/JPEGImages/val"
