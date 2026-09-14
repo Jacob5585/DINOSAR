@@ -40,24 +40,24 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch):
 def main():
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    IMAGE_DIR = "datasets/sardet-100k/JPEGimages/train"
-    ANNOTATION_FILE = "datasets/sardet-100k/Annotations/train_val.json"
+    IMAGE_DIR = "datasets/SARDet_100K/JPEGImages/train_val"
+    ANNOTATION_FILE = "datasets/SARDet_100K/Annotations/train_val.json"
     NUM_CLASSES = 7 # background + 6 catagories
 
-    for param in model.backbone.paramters():
-        param.requires_grad = True
+    for param in model.backbone.parameters():
+        param.requires_grad = False
 
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, NUM_CLASSES)
 
     model.to(device)
 
-    dataset = SARDet100KDataset(img_dir=IMAGE_DIR, annotation_file=ANNOTATION_FILE, transforms=ToTensor())
+    dataset = SARDet100KDataset(image_dir=IMAGE_DIR, annotation_file=ANNOTATION_FILE, transforms=ToTensor())
     data_loader = DataLoader(
         dataset, 
-        batch_size=4, 
+        batch_size=8, 
         shuffle=True, 
-        num_workers=2, 
+        num_workers=8, 
         collate_fn=collate_fn
     )
     

@@ -4,16 +4,17 @@ from PIL import Image
 import torch.utils.data
 from torchvision.transforms import functional as F
 
-class SARDet100KDataset(torch.utils.data.dataloader):
-    def __int__(self, json_path, image_dir):
+class SARDet100KDataset(torch.utils.data.Dataset):
+    def __init__(self, image_dir, annotation_file, transforms=None):
         self.image_dir = image_dir
+        self.transforms = transforms
 
-        with open(json_path, "r") as f:
+        with open(annotation_file, "r") as f:
             self.annotations = json.load(f)
 
         self.images = self.annotations['images']
 
-        catagories = self.annotations.get['categories', []]
+        catagories = self.annotations.get('categories', [])
         if catagories:
             self.catagory_id_to_label = {catagorie['id']: i + 1 for i, catagorie in enumerate(catagories)}
         else:
@@ -32,7 +33,7 @@ class SARDet100KDataset(torch.utils.data.dataloader):
         image = Image.open(image_path)
         width, height = image.size
         image_id = image_info['id']
-        annotations = self.image_to_annotation(image_id, [])
+        annotations = self.image_to_annotation.get(image_id, [])
 
         boxes = []
         labels = []
