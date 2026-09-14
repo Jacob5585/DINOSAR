@@ -3,11 +3,17 @@ import shutil
 import os
 import json
 
-# Download latest version
-path = kagglehub.dataset_download("greatbird/sardet-100k")
+# Download
 dest_path = "datasets"
-val_path = f"{dest_path}/SARDet_100K/JPEGImages/val"
+path = kagglehub.dataset_download("greatbird/sardet-100k", dest_path)
+
 train_path = f"{dest_path}/SARDet_100K/JPEGImages/train"
+val_path = f"{dest_path}/SARDet_100K/JPEGImages/val"
+train_val_path = f"{dest_path}/SARDet_100K/JPEGImages/train_val"
+
+train_json_path = f"{dest_path}/SARDet_100K/Annotation/train.json"
+val_json_path = f"{dest_path}/SARDet_100K/Annotation/val.json"
+train_val_json_path = f"{dest_path}/SARDet_100K/Annotation/train_val.json"
 
 print("Path to dataset files:", path)
 
@@ -16,17 +22,19 @@ shutil.move(path, dest_path)
 
 print("Merging validation into train:")
 
+train_images = os.listdir(train_path)
 val_images = os.listdir(val_path)
-for image in val_images:
-    shutil.move(os.path.join(val_path, image), train_path)
 
-os.rmdir(val_path)
+for image in train_images:
+    shutil.copy(os.path.join(train_path, image), train_val_path)
 
-# This isnt needed since the annotations won't be used during DINO traing, but added incase there every comes a need for it
-with open(f'{dest_path}/SARDet_100K/Annotations/train.json', 'r') as f:
+for image in train_images:
+    shutil.copy(os.path.join(val_path, image), train_val_path)
+
+with open(f'{train_json_path}', 'r') as f:
     train_json = json.load(f)
 
-with open(f'{dest_path}/SARDet_100K/Annotations/val.json', 'r') as f:
+with open(f'{val_json_path}', 'r') as f:
     val_json = json.load(f)
 
 merged = {
@@ -35,11 +43,9 @@ merged = {
     "categories": train_json["categories"].copy()
 }
 
-# Add images from file 2
+# Add images, annotations from file val
 merged["images"].extend(val_json["images"])
-
-# Add annotations from file 2
 merged["annotations"].extend(val_json["annotations"])
 
-with open(f"{dest_path}/SARDet_100K/Annotations/train_val.json", "w") as f:
+with open(f"{train_val_json_path}", "w") as f:
     json.dump(merged, f, indent=2)
