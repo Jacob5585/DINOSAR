@@ -37,6 +37,7 @@ import utils
 import vision_transformer as vits
 import swin_transformer as swins
 from vision_transformer import DINOHead
+from dataset import SARDet100KDatasetSSLTraing
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -166,7 +167,7 @@ def train_dino(args):
         args.local_crops_number,
     )
     # dataset = datasets.ImageFolder(args.data_path, transform=transform)
-    dataset = dataset.SARDet100KDatasetSSLTraing(args.data_path, transform=transform)
+    dataset = SARDet100KDatasetSSLTraing(args.data_path, transform=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,
