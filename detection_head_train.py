@@ -8,9 +8,9 @@ from torch.utils.data import DataLoader
 from dataset import SARDet100KDataset, collate_fn
 
 def load_model():
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
     old_conv = model.backbone.body.conv1
-    single_channel_conv = model.backbone.body.conv1(
+    single_channel_conv = nn.Conv2d(
         in_channels=1,
         out_channels=old_conv.out_channels,
         kernel_size=old_conv.kernel_size,
@@ -23,6 +23,9 @@ def load_model():
     with torch.no_grad():
         single_channel_conv.weight = nn.Parameter(old_conv.weight.sum(dim=1, keepdim=True))
     model.backbone.body.conv1 = single_channel_conv
+
+    model.transform.image_mean = [0.449]
+    model.transform.image_std = [0.226]
 
     return model
 

@@ -29,7 +29,7 @@ class SARDet100KDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         image_info = self.images[idx]
         image_path = os.path.join(self.image_dir, image_info['file_name'])
-        image = Image.open(image_path)
+        image = Image.open(image_path).convert("L")
         width, height = image.size
         image_id = image_info['id']
         annotations = self.image_to_annotation.get(image_id, [])
@@ -108,7 +108,7 @@ class SARDet100KDatasetSSLTraing(torch.utils.data.Dataset):
         image_name = self.images[idx]
         image_path = os.path.join(self.image_dir, image_name)
 
-        image = Image.open(image_path)
+        image = Image.open(image_path).convert("L")
 
         if self.transforms is not None:
             image = self.transforms(image)

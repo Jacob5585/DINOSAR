@@ -236,7 +236,7 @@ def train_dino(args):
         print(f"Unknow architecture: {args.arch}")
 
     # Adapt to single channel
-    
+
 
     if args.use_lora:
             # target_models = ["qkv"] if "vit" in args.arch or "deit" in args.arch else ["query", "value"]
@@ -656,7 +656,7 @@ class DataAugmentationDINO(object):
         ])
         normalize = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            transforms.Normalize(mean=[0.449], std=[0.226]),
         ])
 
         # first global crop
