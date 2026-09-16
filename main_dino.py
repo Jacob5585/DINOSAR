@@ -167,7 +167,7 @@ def train_dino(args):
         args.local_crops_number,
     )
     # dataset = datasets.ImageFolder(args.data_path, transform=transform)
-    dataset = SARDet100KDatasetSSLTraing(args.data_path, transform=transform)
+    dataset = SARDet100KDatasetSSLTraing(args.data_path, transforms=transform)
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
     data_loader = torch.utils.data.DataLoader(
         dataset,

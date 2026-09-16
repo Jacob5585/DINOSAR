@@ -98,7 +98,7 @@ def collate_fn(batch):
 class SARDet100KDatasetSSLTraing(torch.utils.data.Dataset):
     def __init__(self, image_dir, transforms=None):
         self.image_dir = image_dir
-        self.transform = self.transform
+        self.transforms = transforms
         self.images = [file for file in os.listdir(image_dir)]
 
     def __len__(self):
