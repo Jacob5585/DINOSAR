@@ -235,6 +235,9 @@ def train_dino(args):
     else:
         print(f"Unknow architecture: {args.arch}")
 
+    # Adapt to single channel
+    
+
     if args.use_lora:
             # target_models = ["qkv"] if "vit" in args.arch or "deit" in args.arch else ["query", "value"]
             target_models = ["qkv", "proj"]
