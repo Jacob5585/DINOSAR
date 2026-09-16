@@ -81,9 +81,9 @@ def get_args_parser():
 
     parser.add_argument('--use_bn_in_head', default=False, type=utils.bool_flag, help="Whether to use batch normalizations in projection head (Default: False)")
 
-    parser.add_argument('--pretrained', default=True, type=utils.bool_flag, help="Whether to use pretrained weights (Default: True)")
+    # parser.add_argument('--pretrained', default=True, type=utils.bool_flag, help="Whether to use pretrained weights (Default: True)")
 
-    parser.add_argument('--pretrained_path', default='', type=str, help="Weights to load into model (Default: '')")
+    parser.add_argument('--pretrained_path', default=None, type=str, help="Weights to load into model (Default: '')")
 
     # Temperature teacher parameters
     parser.add_argument('--warmup_teacher_temp', default=0.04, type=float,
@@ -189,7 +189,7 @@ def train_dino(args):
             patch_size=args.patch_size,
             in_chans=args.in_chans,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
-            pretrained=args.pretrained,
+            pretrained=args.pretrained_path is not None, #args.pretrained,
             pretrained_path="weights/" + args.pretrained_path,
         )
         teacher = vits.__dict__[args.arch](
@@ -206,7 +206,7 @@ def train_dino(args):
             window_size=args.window_size,
             drop_path_rate=args.drop_path_rate,  # stochastic depth
             use_dense_prediction=args.use_dense_prediction,
-            pretrained=args.pretrained,
+            pretrained=args.pretrained_path is not None, #args.pretrained,
             pretrained_path="weights/" + args.pretrained_path,
         )
         teacher = swins.__dict__[args.arch](
