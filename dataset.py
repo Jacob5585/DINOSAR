@@ -1,6 +1,7 @@
 import os
 import json
 from PIL import Image
+from collections import defaultdict
 import torch.utils.data
 from torchvision.transforms import functional as F
 
@@ -20,12 +21,10 @@ class SARDet100KDataset(torch.utils.data.Dataset):
         else:
             self.catagory_id_to_label = None
 
-        self.image_to_annotation = {}
+        self.image_to_annotation = defaultdict(list)
         for annotation in self.annotations.get('annotation', []):
-            image_id = self.annotation['image_id']
-
-            if image_id not in self.image_to_annotation:
-                self.image_to_annotation[image_id].append(annotation)
+            image_id = annotation['image_id']
+            self.image_to_annotation[image_id].append(annotation)
    
     def __getitem__(self, idx):
         image_info = self.images[idx]
@@ -60,6 +59,8 @@ class SARDet100KDataset(torch.utils.data.Dataset):
                 label = self.catagory_id_to_label[category_id]
             else:
                 label = category_id if category_id > 0 else category_id + 1
+
+            labels.append(label)
 
             areas.append(annotation.get('area', (xmax - xmin) * (ymax - ymin)))
             iscrowd.append(annotation.get('iscrowd', 0))
