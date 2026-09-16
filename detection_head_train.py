@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.transforms import functional as F
@@ -6,9 +7,24 @@ from torch.utils.data import DataLoader
 
 from dataset import SARDet100KDataset, collate_fn
 
-model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-    weight="DEFAULT"
-)
+def load_model():
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
+    old_conv = model.backbone.body.conv1
+    single_channel_conv = model.backbone.body.conv1(
+        in_channels=1,
+        out_channels=old_conv.out_channels,
+        kernel_size=old_conv.kernel_size,
+        stride=old_conv.stride,
+        padding=old_conv.padding,
+        bias=old_conv.bias
+    )
+
+    # Average existing RGB weights across input channels to preserve pretrained weights
+    with torch.no_grad():
+        single_channel_conv.weight = nn.Parameter(old_conv.weight.sum(dim=1, keepdim=True))
+    model.backbone.body.conv1 = single_channel_conv
+
+    return model
 
 class ToTensor(object):
     def __call__(self, image, target):
@@ -43,6 +59,8 @@ def main():
     IMAGE_DIR = "datasets/SARDet_100K/JPEGImages/train_val"
     ANNOTATION_FILE = "datasets/SARDet_100K/Annotations/train_val.json"
     NUM_CLASSES = 7 # background + 6 catagories
+
+    model = load_model()
 
     for param in model.backbone.parameters():
         param.requires_grad = False
