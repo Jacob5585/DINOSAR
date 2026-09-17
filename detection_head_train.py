@@ -21,7 +21,7 @@ def load_model():
 
     # Average existing RGB weights across input channels to preserve pretrained weights
     with torch.no_grad():
-        single_channel_conv.weight = nn.Parameter(old_conv.weight.sum(dim=1, keepdim=True))
+        single_channel_conv.weight = nn.Parameter(old_conv.weight.mean(dim=1, keepdim=True))
     model.backbone.body.conv1 = single_channel_conv
 
     model.transform.image_mean = [0.449]
