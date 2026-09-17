@@ -463,42 +463,6 @@ def train_one_epoch(student, teacher, teacher_without_ddp, dino_loss, data_loade
 
         # EMA update for the teacher
 
-        # TODO Delete this commeted out code
-        # with torch.no_grad():
-        #     m = momentum_schedule[it]  # momentum parameter
-        #     for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):
-        #         param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)
-        # student_params = dict(student.module.named_parameters())
-        # teacher_params = dict(teacher_without_ddp.named_parameters())
-
-        # with torch.no_grad():
-        #     m = momentum_schedule[it]
-
-        #     for name, param_q in student_params.items():
-
-        #         if name not in teacher_params:
-        #             continue
-
-        #         param_k = teacher_params[name]
-
-        #         param_k.data.mul_(m).add_(
-        #             (1.0 - m) * param_q.detach().data
-        #         )
-
-        # with torch.no_grad():
-        #     m = momentum_schedule[it]
-
-        #     student_params = dict(student.module.named_parameters())
-        #     teacher_params = dict(teacher_without_ddp.named_parameters())
-
-        #     for name, param_q in student_params.items():
-        #         if "lora_" in name:
-        #             param_k = teacher_params[name]
-        #             param_k.data.mul_(m).add_(
-        #                 param_q.detach().data,
-        #                 alpha=1.0 - m
-        #             )
-
         with torch.no_grad():
             m = momentum_schedule[it]
 
