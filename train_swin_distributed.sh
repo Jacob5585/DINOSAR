@@ -1,5 +1,5 @@
 #!/bin/bash
-python main_dino.py \
+torchrun --nproc_per_node=3 main_dino.py \
     --arch swin_tiny \
     --patch_size 4 \
     --window_size 7 \
@@ -9,4 +9,4 @@ python main_dino.py \
     --in_chans 1 \
     --use_dense_prediction True \
     --use_lora True \
-    --pretrained_path swin_tiny_esvit.pth
+    --pretrained_path swin_tiny_patch4_window7_224.pth
