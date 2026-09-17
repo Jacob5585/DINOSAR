@@ -506,6 +506,10 @@ def load_pretrained_swin(model, checkpoint_path):
         map_location='cpu'
     )
 
+    # TODO convert 3 chan wright 1 chan
+    weight_layer1 = 'patch_embed.proj.weight'
+    checkpoint['model'][weight_layer1] = checkpoint['model'][weight_layer1].mean(dim=1, keepdim=True)
+
     if "model" in checkpoint:
         state_dict = checkpoint["model"]
     else:
