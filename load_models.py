@@ -19,14 +19,15 @@ def load_single_channel_model(model, layer_path):
         kernel_size=old_conv.kernel_size,
         stride=old_conv.stride,
         padding=old_conv.padding,
-        bias=old_conv.bias
+        bias=old_conv.bias is not None
     )
 
     # Average existing RGB weights across input channels to preserve pretrained weights
     with torch.no_grad():
         single_channel_conv.weight = nn.Parameter(old_conv.weight.mean(dim=1, keepdim=True))
-    model.backbone.body.conv1 = single_channel_conv
+    # model.backbone.body.conv1 = single_channel_conv
 
+    setattr(parent, parts[-1], single_channel_conv)
 
     # Only for model.transform.image_mean only exist in Torchvision object detection models (like Faster R-CNN),
     if hasattr(model, 'transform'):

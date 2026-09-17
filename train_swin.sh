@@ -6,6 +6,7 @@ python main_dino.py \
     --data_path datasets/SARDet_100K/JPEGImages/val \
     --batch_size_per_gpu 2 \
     --epochs 100 \
+    --in_chans 1 \
     --use_dense_prediction True \
     --use_lora True \
     --pretrained_path swin_tiny_esvit.pth
