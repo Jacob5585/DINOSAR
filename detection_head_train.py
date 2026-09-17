@@ -6,28 +6,29 @@ from torchvision.transforms import functional as F
 from torch.utils.data import DataLoader
 
 from dataset import SARDet100KDataset, collate_fn
+import load_models
 
-def load_model():
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
-    old_conv = model.backbone.body.conv1
-    single_channel_conv = nn.Conv2d(
-        in_channels=1,
-        out_channels=old_conv.out_channels,
-        kernel_size=old_conv.kernel_size,
-        stride=old_conv.stride,
-        padding=old_conv.padding,
-        bias=old_conv.bias
-    )
+# def load_model():
+#     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights="DEFAULT")
+#     old_conv = model.backbone.body.conv1
+#     single_channel_conv = nn.Conv2d(
+#         in_channels=1,
+#         out_channels=old_conv.out_channels,
+#         kernel_size=old_conv.kernel_size,
+#         stride=old_conv.stride,
+#         padding=old_conv.padding,
+#         bias=old_conv.bias
+#     )
 
-    # Average existing RGB weights across input channels to preserve pretrained weights
-    with torch.no_grad():
-        single_channel_conv.weight = nn.Parameter(old_conv.weight.mean(dim=1, keepdim=True))
-    model.backbone.body.conv1 = single_channel_conv
+#     # Average existing RGB weights across input channels to preserve pretrained weights
+#     with torch.no_grad():
+#         single_channel_conv.weight = nn.Parameter(old_conv.weight.mean(dim=1, keepdim=True))
+#     model.backbone.body.conv1 = single_channel_conv
 
-    model.transform.image_mean = [0.449]
-    model.transform.image_std = [0.226]
+#     model.transform.image_mean = [0.449]
+#     model.transform.image_std = [0.226]
 
-    return model
+#     return model
 
 class ToTensor(object):
     def __call__(self, image, target):
@@ -63,7 +64,9 @@ def main():
     ANNOTATION_FILE = "datasets/SARDet_100K/Annotations/train_val.json"
     NUM_CLASSES = 7 # background + 6 catagories
 
-    model = load_model()
+    # model = load_model()
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
+    model = load_models.load_single_channel_model(model, 'backbone.body.conv1')
 
     for param in model.backbone.parameters():
         param.requires_grad = False

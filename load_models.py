@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torchvision
 
-def load_single_channel_fasterrcnn_model():
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
-    load_single_channel_model(model, 'backbone.body.conv1')
+# def load_single_channel_fasterrcnn_model():
+#     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
+#     load_single_channel_model(model, 'backbone.body.conv1')
 
 def load_single_channel_model(model, layer_path):
     parts = layer_path.split('.')
