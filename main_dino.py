@@ -38,6 +38,7 @@ import vision_transformer as vits
 import swin_transformer as swins
 from vision_transformer import DINOHead
 from dataset import SARDet100KDatasetSSLTraing
+import load_models
 
 torchvision_archs = sorted(name for name in torchvision_models.__dict__
     if name.islower() and not name.startswith("__")
@@ -235,7 +236,12 @@ def train_dino(args):
     else:
         print(f"Unknow architecture: {args.arch}")
 
+    # TODO
     # Adapt to single channel
+    # Currently assumes 1 channel all the time
+    if args.in_chans == 1:
+        student = load_models.load_single_channel_model(student, "patch_embed.proj")
+        teacher = load_models.load_single_channel_model(teacher, "patch_embed.proj")
 
 
     if args.use_lora:
