@@ -232,6 +232,38 @@ class VisionTransformer(nn.Module):
                 output.append(self.norm(x))
         return output
 
+def load_pretrained_weights(model, checkpoint_path):
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location='cpu'
+    )
+
+    # TODO convert 3 chan wright 1 chan
+    weight_layer1 = 'patch_embed.proj.weight'
+    checkpoint['model'][weight_layer1] = checkpoint['model'][weight_layer1].mean(dim=1, keepdim=True)
+
+    if "model" in checkpoint:
+        state_dict = checkpoint["model"]
+    else:
+        state_dict = checkpoint
+
+    state_dict.pop("head.weight", None)
+    state_dict.pop("head.bias", None)
+
+    msg = model.load_state_dict(
+        state_dict,
+        strict=False,
+    )
+
+    print("Loaded pretrained Swin-Tiny weights.")
+
+    for key in msg.missing_keys:
+        print("Key is missing: ", key)
+
+    for key in msg.unexpected_keys:
+        print("Key is unexpected: ", key)
+
+    return model
 
 def vit_tiny(patch_size=16, in_chans=3, **kwargs):
     model = VisionTransformer(
@@ -240,10 +272,20 @@ def vit_tiny(patch_size=16, in_chans=3, **kwargs):
     return model
 
 
-def vit_small(patch_size=16, in_chans=3, **kwargs):
+def vit_small(patch_size=16, in_chans=3, pretrained=False, pretrained_path=None, **kwargs):
     model = VisionTransformer(
         patch_size=patch_size,  in_chans=in_chans, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4,
         qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+
+    if pretrained:
+            if pretrained_path is None:
+                raise ValueError("pretrained_path must be provided when pretrained=True")
+    
+            load_pretrained_weights(
+                model,
+                pretrained_path,
+            )
+
     return model
 
 
