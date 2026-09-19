@@ -500,7 +500,7 @@ class SwinTransformer(nn.Module):
         
         return self.forward(x)
 
-def load_pretrained_swin(model, checkpoint_path):
+def load_pretrained_weights(model, checkpoint_path):
     checkpoint = torch.load(
         checkpoint_path,
         map_location='cpu'
@@ -544,7 +544,7 @@ def swin_tiny(patch_size=4, in_chans=3, window_size=7, pretrained=False, pretrai
         if pretrained_path is None:
             raise ValueError("pretrained_path must be provided when pretrained=True")
 
-        load_pretrained_swin(
+        load_pretrained_weights(
             model,
             pretrained_path,
         )
