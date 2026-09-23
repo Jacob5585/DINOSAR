@@ -1,13 +1,11 @@
 import argparse
 import json
- 
 import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import functional as F
- 
 from dataset import SARDet100KDataset, collate_fn
 from model_adapter import combine_backbone_detection_head
-from metrics import evaluate_predictions, save_report, format_report
+from metrics import evaluate_predictions, save_result
 
 class ToTensor(object):
     def __call__(self, image, target):
@@ -120,7 +118,7 @@ def main():
     predictions = test(model, data_loader, device, label_to_category_id, score_threshold=args.score_threshold)
 
     result = evaluate_predictions(args.annotation_file, predictions)
-    save_report(result, args.metrics_output)
+    save_result(result, args.metrics_output)
 
 if __name__ == "__main__":
     main()
