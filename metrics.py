@@ -44,7 +44,7 @@ def run_coco_eval(coco_gt, coco_dt, iou_type, use_cats):
 
     return coco_eval, buf.getvalue()
 
-def evaluate_predictation(prediction_file, predictions, iou_type="bbox"):
+def evaluate_predictions(prediction_file, predictions, iou_type="bbox"):
     coco_gt = COCO(prediction_file)
     coco_dt = coco_gt.loadRes(predictions)
 

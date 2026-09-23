@@ -23,6 +23,4 @@ dependencies:
     - kagglehub
     - peft
     - timm
-    - pycocotools
-    - json
-    
+    - pycocotools    
