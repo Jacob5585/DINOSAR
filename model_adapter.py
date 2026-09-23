@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision.ops import FeaturePyramidNetwork
 from torchvision.ops.feature_pyramid_network import LastLevelMaxPool
+from torchvision.models.detection import FasterRCNN
 from peft import get_peft_model, LoraConfig
 from collections import OrderedDict
 
@@ -18,6 +19,14 @@ lora_config = LoraConfig(
 
 FPN_OUT_CHANNELS = 256
 
+def load_detection_head(model, detection_head_checkpoint_path):
+    detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weight_only=False)
+    head_state_dict = detection_head_checkpoint.get("model", detection_head_checkpoint)
+    non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
+    model.load_state_dict(non_backbone_state_dict, strict=False)
+
+    return model
+
 def extract_backbone(checkpoint, key):
     state_dict = checkpoint.get(key, checkpoint)
 
@@ -32,7 +41,7 @@ def load_model(model, backbone, lora_state):
     if lora_state:
             model = get_peft_model(model, lora_config()).merge_and_unload()
 
-    model = model.load_state_dict(backbone, strict=False)
+    model.load_state_dict(backbone, strict=False)
 
     model.eval()
     for p in model.parameters():
@@ -86,12 +95,13 @@ def vit_spatial_map(model, x):
 
     patch_tokens = tokens[:, 1:, :]
     C = patch_tokens.shape[-1]
-    feature_map = patch_tokens = patch_tokens.transpose(1, 2).reshape(B, C, H_image, W_image)
+    feature_map = patch_tokens = patch_tokens.transpose(1, 2).reshape(B, C, Hp, Wp)
 
     return feature_map
 
 def swin_spatial_map(model, x):
     """
+    Explain what is going on and why
     """
     tokens, H, W = model.patch_embed(x)
     tokens = model.pos_drop(tokens)
@@ -146,6 +156,7 @@ class ViTFeaturePyramidbackboneAdapter(nn.Module):
 
 class SwinFeaturePyramidbackboneAdapter(nn.Module):
     """
+    Explain what is going on and why
     """
     def __init__(self, model, out_channels=FPN_OUT_CHANNELS):
         super().__init__()
@@ -163,3 +174,44 @@ class SwinFeaturePyramidbackboneAdapter(nn.Module):
         levels = OrderedDict((str(i), fm) for i, fm in enumerate(stage_maps))
 
         return self.fpn(levels)
+
+def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='student', **arch_kwargs):
+    if arch_type == "vit":
+        vit = load_vit_backbone(
+            checkpoint_path=checkpoint_path,
+            arch=arch_kwargs.get("arch", "vit_small"),
+            patch_size=arch_kwargs.get("patch_size", 16),
+            in_chans=in_chans,
+            checkpoint_key=checkpoint_key,
+        )
+        return ViTFeaturePyramidbackboneAdapter(vit)
+
+    elif arch_type == "swin":
+        swin = load_swin_backbone(
+            checkpoint_path=checkpoint_path,
+            arch=arch_kwargs.get("arch", "swin_tiny"),
+            patch_size=arch_kwargs.get("patch_size", 4),
+            in_chans=in_chans,
+            window_size=arch_kwargs.get("window_size", 7),
+            checkpoint_key=checkpoint_key,
+        )
+        return SwinFeaturePyramidbackboneAdapter(swin)
+
+def combine_backbone_detection_head(arch_type, backbone_checkpoint_path, detection_head_checkpoint_path, num_classes, backbone_checkpoint_key='student', in_chans=1, **backbone_arch_kwargs):
+    backbone = load_adapted_model(
+        arch_type,
+        backbone_checkpoint_path,
+        in_chans=in_chans,
+        checkpoint_key=backbone_checkpoint_key,
+        **backbone_arch_kwargs
+    )
+
+    model = FasterRCNN(backbone, num_classes=num_classes)
+    model.transform.image_mean = [0.449]
+    model.transform.image_std = [0.226]
+
+    load_detection_head(model, detection_head_checkpoint_path)
+
+    model.eval()
+
+    return model
