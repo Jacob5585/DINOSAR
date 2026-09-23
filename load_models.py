@@ -2,10 +2,6 @@ import torch
 import torch.nn as nn
 import torchvision
 
-# def load_single_channel_fasterrcnn_model():
-#     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weight="DEFAULT")
-#     load_single_channel_model(model, 'backbone.body.conv1')
-
 def load_single_channel_model(model, layer_path):
     parts = layer_path.split('.')
     parent = model
@@ -31,8 +27,8 @@ def load_single_channel_model(model, layer_path):
 
     # Only for model.transform.image_mean only exist in Torchvision object detection models (like Faster R-CNN),
     if hasattr(model, 'transform'):
-        model.transform.image_mean = [0.5]
-        model.transform.image_std = [0.5]
+        model.transform.image_mean = [0.449]
+        model.transform.image_std = [0.226]
 
     setattr(parent, parts[-1], single_channel_conv)
     return model
