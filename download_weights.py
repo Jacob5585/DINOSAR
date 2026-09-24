@@ -59,6 +59,8 @@ if __name__ == "__main__":
         "https://sunypoly-my.sharepoint.com/:u:/g/personal/cormiej_sunypoly_edu/IQA1nZoGcW-iQLGIy2He0jCfAX82gz3JIfN4kxYmiCIaSUw?e=adcivK",
         "https://sunypoly-my.sharepoint.com/:u:/g/personal/cormiej_sunypoly_edu/IQBbqRp1CtCBRobPyu58-0ifAR3yzX8mfAp2swhlocCMHak?e=0L2WOe",
         "https://sunypoly-my.sharepoint.com/:u:/g/personal/cormiej_sunypoly_edu/IQCDxAEbfygpR4JrDDDYd_05ATVLFms3w4dGuZAUHu_Lboc?e=5QywPS",
+        "https://sunypoly-my.sharepoint.com/:u:/g/personal/cormiej_sunypoly_edu/IQDLicvmRbnsS6ZGgwNtEZBrAZYCzvcxhBIHCs40P2GrVQY?e=CwNjpF",
+        "https://sunypoly-my.sharepoint.com/:u:/g/personal/cormiej_sunypoly_edu/IQBlI-HYjNCIT5L0BlY6Fek_Aay_URMtyxni-3WenDxEx3U?e=yOUSh0",
     ]
 
     download_files(weights, output_directory="weights")
