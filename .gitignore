@@ -1,4 +1,5 @@
 datasets
 output_dir_reg_vit/*
 output_dir_swin/*
+weights/*.pth
 __pycache__

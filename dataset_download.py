@@ -51,3 +51,6 @@ def combine_train_val():
 def main():
     download()
     combine_train_val()
+
+if __name__ == "__main__":
+    main()
