@@ -9,18 +9,19 @@ from collections import OrderedDict
 import vision_transformer as vits
 import swin_transformer as swins
 
-lora_config = LoraConfig(
-    r = 16,
-    lora_alpha=32,
-    lora_dropout=0.05,
-    target_modules=["qkv", "proj"],
-    bias="none"
-)
+def lora_config():
+    return LoraConfig(
+        r = 16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+        target_modules=["qkv", "proj"],
+        bias="none"
+    )
 
 FPN_OUT_CHANNELS = 256
 
 def load_detection_head(model, detection_head_checkpoint_path):
-    detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weight_only=False)
+    detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weights_only=False)
     head_state_dict = detection_head_checkpoint.get("model", detection_head_checkpoint)
     non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
     model.load_state_dict(non_backbone_state_dict, strict=False)
@@ -39,7 +40,9 @@ def extract_backbone(checkpoint, key):
 
 def load_model(model, backbone, lora_state):
     if lora_state:
-            model = get_peft_model(model, lora_config()).merge_and_unload()
+            peft_model = get_peft_model(model, lora_config())
+            peft_model.load_state_dict(backbone, strict=False)
+            model = peft_model.merge_and_unload()
 
     model.load_state_dict(backbone, strict=False)
 
@@ -111,9 +114,9 @@ def swin_spatial_map(model, x):
         x_out, H_out, W_out, tokens, H, W = layer(tokens, H, W)
 
         if hasattr(model, "stage_norms"):
-            x_out = model.stage_norm[i](x_out)
+            x_out = model.stage_norms[i](x_out)
 
-        C = x.out.shape[-1]
+        C = x_out.shape[-1]
         feature_map = x_out.transpose(1, 2).reshape(x_out.shape[0], C, H_out, W_out)
         stage_maps.append(feature_map)
 
@@ -135,13 +138,13 @@ class ViTFeaturePyramidbackboneAdapter(nn.Module):
             nn.ConvTranspose2d(dim, dim, kernel_size=2, stride=2),
         )
         self.stride8 = nn.ConvTranspose2d(dim, dim, kernel_size=2, stride=2)
-        self.stride16 = nn.Identitiy()
+        self.stride16 = nn.Identity()
         self.stride32 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=[dim, dim, dim, dim],
             out_channels=out_channels,
-            extract_blocks=LastLevelMaxPool(),
+            extra_blocks=LastLevelMaxPool(),
         )
 
     def forward(self, x):
@@ -166,7 +169,7 @@ class SwinFeaturePyramidbackboneAdapter(nn.Module):
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=list(model.embed_dims),
             out_channels=out_channels,
-            extra_block=LastLevelMaxPool(),
+            extra_blocks=LastLevelMaxPool(),
         )
 
     def forward(self, x):
@@ -182,7 +185,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             arch=arch_kwargs.get("arch", "vit_small"),
             patch_size=arch_kwargs.get("patch_size", 16),
             in_chans=in_chans,
-            checkpoint_key=checkpoint_key,
+            key=checkpoint_key,
         )
         return ViTFeaturePyramidbackboneAdapter(vit)
 
@@ -193,7 +196,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             patch_size=arch_kwargs.get("patch_size", 4),
             in_chans=in_chans,
             window_size=arch_kwargs.get("window_size", 7),
-            checkpoint_key=checkpoint_key,
+            key=checkpoint_key,
         )
         return SwinFeaturePyramidbackboneAdapter(swin)
 

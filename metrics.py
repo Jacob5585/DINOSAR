@@ -45,6 +45,10 @@ def run_coco_eval(coco_gt, coco_dt, iou_type, use_cats):
     return coco_eval, buf.getvalue()
 
 def evaluate_predictions(prediction_file, predictions, iou_type="bbox"):
+    if len(predictions) == 0:
+        raise ValueError("Error: The `predictions` list is completely empty! "
+                         "Your model generated zero bounding boxes above the score threshold.")
+
     coco_gt = COCO(prediction_file)
     coco_dt = coco_gt.loadRes(predictions)
 
@@ -101,7 +105,7 @@ def save_result(result, output_file):
     with open(output_file, "w") as f:
         f.write(report + "\n")
 
-    json_path = output_file.rspit(".", 1)[0] + ".json"
+    json_path = output_file.rsplit(".", 1)[0] + ".json"
     json.dump(json_path, f, indent=2, allow_nan=False)
  
     # return output_file, json_path

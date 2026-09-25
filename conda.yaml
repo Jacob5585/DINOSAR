@@ -1,26 +1,27 @@
 name: dinosar
 channels:
-  - defaults
+  - pytorch
+  - nvidia
   - conda-forge
+  - defaults
 dependencies:
   - python=3.11
+  - pytorch
+  - torchvision
+  - pytorch-cuda=12
   - omegaconf
+  - pandas
+  - scikit-learn
+  - scikit-learn-intelex
+  - submitit
+  - termcolor
+  - torchmetrics
+  - kagglehub
+  - peft
+  - timm
+  - pycocotools
   - pip
   - pip:
     - ftfy # needed for dino.txt
     - iopath
-    - omegaconf
-    - pandas 
     - regex # needed for dino.txt
-    - pandas
-    - scikit-learn
-    - scikit-learn-intelex
-    - submitit
-    - termcolor
-    - torch 
-    - torchvision 
-    - torchmetrics
-    - kagglehub
-    - peft
-    - timm
-    - pycocotools    
