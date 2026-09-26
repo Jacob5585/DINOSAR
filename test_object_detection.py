@@ -89,7 +89,7 @@ def main():
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_worker=4,
+        num_workers=4,
         collate_fn=collate_fn,
     )
 
@@ -108,7 +108,7 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
-        num_classes=7,
+        num_classes=7
     )
     model.to(device)
 
@@ -118,7 +118,7 @@ def main():
 
     predictions = test(model, data_loader, device, label_to_category_id, score_threshold=args.score_threshold)
 
-    result = evaluate_predictions(args.annotation_file, predictions)
+    result = evaluate_predictions(annotation_file, predictions)
     save_result(result, args.metrics_output)
 
 if __name__ == "__main__":

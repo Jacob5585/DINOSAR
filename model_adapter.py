@@ -21,7 +21,7 @@ def lora_config():
 FPN_OUT_CHANNELS = 256
 
 def load_detection_head(model, detection_head_checkpoint_path):
-    detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weight_only=False)
+    detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weights_only=False)
     head_state_dict = detection_head_checkpoint.get("model", detection_head_checkpoint)
     non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
     model.load_state_dict(non_backbone_state_dict, strict=False)
@@ -114,9 +114,9 @@ def swin_spatial_map(model, x):
         x_out, H_out, W_out, tokens, H, W = layer(tokens, H, W)
 
         if hasattr(model, "stage_norms"):
-            x_out = model.stage_norm[i](x_out)
+            x_out = model.stage_norms[i](x_out)
 
-        C = x.out.shape[-1]
+        C = x_out.shape[-1]
         feature_map = x_out.transpose(1, 2).reshape(x_out.shape[0], C, H_out, W_out)
         stage_maps.append(feature_map)
 
@@ -138,7 +138,7 @@ class ViTFeaturePyramidbackboneAdapter(nn.Module):
             nn.ConvTranspose2d(dim, dim, kernel_size=2, stride=2),
         )
         self.stride8 = nn.ConvTranspose2d(dim, dim, kernel_size=2, stride=2)
-        self.stride16 = nn.Identitiy()
+        self.stride16 = nn.Identity()
         self.stride32 = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.fpn = FeaturePyramidNetwork(
@@ -169,7 +169,7 @@ class SwinFeaturePyramidbackboneAdapter(nn.Module):
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=list(model.embed_dims),
             out_channels=out_channels,
-            extra_block=LastLevelMaxPool(),
+            extra_blocks=LastLevelMaxPool(),
         )
 
     def forward(self, x):
