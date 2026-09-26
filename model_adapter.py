@@ -9,13 +9,14 @@ from collections import OrderedDict
 import vision_transformer as vits
 import swin_transformer as swins
 
-lora_config = LoraConfig(
-    r = 16,
-    lora_alpha=32,
-    lora_dropout=0.05,
-    target_modules=["qkv", "proj"],
-    bias="none"
-)
+def lora_config():
+    return LoraConfig(
+        r = 16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+        target_modules=["qkv", "proj"],
+        bias="none"
+    )
 
 FPN_OUT_CHANNELS = 256
 
@@ -39,7 +40,9 @@ def extract_backbone(checkpoint, key):
 
 def load_model(model, backbone, lora_state):
     if lora_state:
-            model = get_peft_model(model, lora_config()).merge_and_unload()
+            peft_model = get_peft_model(model, lora_config())
+            peft_model.load_state_dict(backbone, strict=False)
+            model = peft_model.merge_and_unload()
 
     model.load_state_dict(backbone, strict=False)
 
@@ -141,7 +144,7 @@ class ViTFeaturePyramidbackboneAdapter(nn.Module):
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=[dim, dim, dim, dim],
             out_channels=out_channels,
-            extract_blocks=LastLevelMaxPool(),
+            extra_blocks=LastLevelMaxPool(),
         )
 
     def forward(self, x):
@@ -182,7 +185,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             arch=arch_kwargs.get("arch", "vit_small"),
             patch_size=arch_kwargs.get("patch_size", 16),
             in_chans=in_chans,
-            checkpoint_key=checkpoint_key,
+            key=checkpoint_key,
         )
         return ViTFeaturePyramidbackboneAdapter(vit)
 
@@ -193,7 +196,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             patch_size=arch_kwargs.get("patch_size", 4),
             in_chans=in_chans,
             window_size=arch_kwargs.get("window_size", 7),
-            checkpoint_key=checkpoint_key,
+            key=checkpoint_key,
         )
         return SwinFeaturePyramidbackboneAdapter(swin)
 

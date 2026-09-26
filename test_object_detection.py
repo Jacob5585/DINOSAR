@@ -87,7 +87,7 @@ def main():
 
     data_loader = DataLoader(
         dataset,
-        batch_sized=args.batch_size,
+        batch_size=args.batch_size,
         shuffle=False,
         num_worker=4,
         collate_fn=collate_fn,
@@ -108,6 +108,7 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
+        num_classes=7,
     )
     model.to(device)
 
