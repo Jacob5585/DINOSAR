@@ -108,7 +108,11 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
+<<<<<<< HEAD
         num_classes=7
+=======
+        num_classes=7,
+>>>>>>> af304f4 (fixes)
     )
     model.to(device)
 

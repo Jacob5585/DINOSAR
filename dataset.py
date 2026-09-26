@@ -22,7 +22,7 @@ class SARDet100KDataset(torch.utils.data.Dataset):
             self.catagory_id_to_label = None
 
         self.image_to_annotation = defaultdict(list)
-        for annotation in self.annotations.get('annotation', []):
+        for annotation in self.annotations.get('annotations', []):
             image_id = annotation['image_id']
             self.image_to_annotation[image_id].append(annotation)
    
