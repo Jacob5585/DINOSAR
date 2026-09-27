@@ -74,6 +74,7 @@ def main():
 
     image_dir = "datasets/SARDet_100K/JPEGImages/test/"
     annotation_file = "datasets/SARDet_100K/test.json"
+    NUM_CLASSES = 7 # background + 6 catagories
  
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     print(f"Using device: {device}")
@@ -108,7 +109,7 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
-        num_classes=7
+        num_classes=NUM_CLASSES
     )
     model.to(device)
 
