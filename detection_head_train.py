@@ -5,6 +5,7 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN, FastRCNNPredict
 from torchvision.transforms import functional as F
 from torch.utils.data import DataLoader
 import argparse
+import os
 
 from model_adapter import load_adapted_model
 from dataset import SARDet100KDataset, collate_fn
@@ -73,9 +74,9 @@ def main():
     dataset = SARDet100KDataset(image_dir=IMAGE_DIR, annotation_file=ANNOTATION_FILE, transforms=ToTensor())
     data_loader = DataLoader(
         dataset, 
-        batch_size=8, 
-        shuffle=True, 
-        num_workers=8, 
+        batch_size=16,
+        shuffle=True,
+        num_workers=8,
         collate_fn=collate_fn
     )
 
@@ -101,11 +102,13 @@ def main():
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(trainable_params, lr=0.005, momentum=0.9, weight_decay=0.0005)
 
-    epochs = 10 # 5
+    epochs = args.epochs
     for epoch in range(epochs):
         train_one_epoch(model, frozen_adapted_backbone, optimizer, data_loader, device, epoch)
 
-    torch.save(model.state_dict(), f"{OUTPUT_DIR}/{arch}_fasterrcnn_head_sardet100k.pth")
+    os.makedirs(os.path.dirname(OUTPUT_DIR), exist_ok=True)
+    model_arch = arch + '_lora' if 'lora' in args.backbone_checkpoint else arch + '_scratch'
+    torch.save(model.state_dict(), f"{OUTPUT_DIR}/{model_arch}_fasterrcnn_head_sardet100k.pth")
     print("Training finished. Checkpoint saved to fasterrcnn_head_sardet100k.pth")
 
 if __name__ == "__main__":
