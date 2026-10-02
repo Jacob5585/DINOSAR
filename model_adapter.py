@@ -23,7 +23,8 @@ FPN_OUT_CHANNELS = 256
 def load_detection_head(model, detection_head_checkpoint_path):
     detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weights_only=False)
     head_state_dict = detection_head_checkpoint.get("model", detection_head_checkpoint)
-    non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
+    # non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
+    non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.model.")}
 
     model.load_state_dict(non_backbone_state_dict, strict=False)
 
