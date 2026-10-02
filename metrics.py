@@ -106,6 +106,8 @@ def save_result(result, output_file):
         f.write(report + "\n")
 
     json_path = output_file.rsplit(".", 1)[0] + ".json"
-    json.dump(json_path, f, indent=2, allow_nan=False)
+ 
+    with open(json_path, "w") as f:
+       json.dump(result, f, indent=2, allow_nan=False)
  
     # return output_file, json_path
