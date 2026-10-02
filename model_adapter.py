@@ -11,7 +11,7 @@ import swin_transformer as swins
 
 def lora_config():
     return LoraConfig(
-        r = 16,
+        r=16,
         lora_alpha=32,
         lora_dropout=0.05,
         target_modules=["qkv", "proj"],
@@ -24,6 +24,7 @@ def load_detection_head(model, detection_head_checkpoint_path):
     detection_head_checkpoint = torch.load(detection_head_checkpoint_path, map_location='cpu', weights_only=False)
     head_state_dict = detection_head_checkpoint.get("model", detection_head_checkpoint)
     non_backbone_state_dict = {k: v for k, v in head_state_dict.items() if not k.startswith("backbone.")}
+
     model.load_state_dict(non_backbone_state_dict, strict=False)
 
     return model
@@ -32,19 +33,24 @@ def extract_backbone(checkpoint, key):
     state_dict = checkpoint.get(key, checkpoint)
 
     for prefix in ("module.backbone.", "backbone."):
-        matched = { k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix) }
+        matched = {k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix)}
 
         if matched:
             lora_state = any(k.startswith("base_model.model.") for k in matched)
             return matched, lora_state
 
+    raise ValueError(
+        "No 'backbone' weights found under 'module.backbone.' or 'backbone.' in this "
+        f"checkpoint (key={key!r}). Saw top-level keys: {list(state_dict.keys())[:5]}"
+    )
+
 def load_model(model, backbone, lora_state):
     if lora_state:
-            peft_model = get_peft_model(model, lora_config())
-            peft_model.load_state_dict(backbone, strict=False)
-            model = peft_model.merge_and_unload()
-
-    model.load_state_dict(backbone, strict=False)
+        peft_model = get_peft_model(model, lora_config())
+        peft_model.load_state_dict(backbone, strict=False)
+        model = peft_model.merge_and_unload()
+    else:
+        model.load_state_dict(backbone, strict=False)
 
     model.eval()
     for p in model.parameters():
@@ -61,7 +67,7 @@ def load_vit_backbone(checkpoint_path, arch, patch_size, in_chans, key='student'
         in_chans=in_chans
     )
 
-    load_model(model, backbone, lora_state)
+    model = load_model(model, backbone, lora_state)
 
     return model
 
@@ -82,9 +88,11 @@ def load_swin_backbone(checkpoint_path, arch, patch_size, window_size, in_chans,
 
 def vit_spatial_map(model, x):
     """
-    Explain what is going on and why
+    VisionTransformer.forward() only returns the pooled CLS token, throwing away spatial
+    layout -- no use for Faster R-CNN, which needs a (B,C,H,W) feature map. This runs the
+    same blocks manually, keeps every patch token (dropping only the CLS token), and
+    reshapes them back into their original H/patch_size x W/patch_size grid.
     """
-
     B, _, H_image, W_image = x.shape
     patch_size = model.patch_embed.patch_size
     Hp, Wp = H_image // patch_size, W_image // patch_size
@@ -98,13 +106,17 @@ def vit_spatial_map(model, x):
 
     patch_tokens = tokens[:, 1:, :]
     C = patch_tokens.shape[-1]
-    feature_map = patch_tokens = patch_tokens.transpose(1, 2).reshape(B, C, Hp, Wp)
+    feature_map = patch_tokens.transpose(1, 2).reshape(B, C, Hp, Wp)
 
     return feature_map
 
 def swin_spatial_map(model, x):
     """
-    Explain what is going on and why
+    SwinTransformer.forward() only returns a pooled vector. Swin is
+    naturally hierarchical though (4 stages at strides 4/8/16/32, just like a ResNet's
+    C2-C5), so this runs each stage manually and keeps its pre-downsample spatial output
+    (using stage_norms, allocated because use_dense_prediction=True during training) as
+    (B, C_i, H_i, W_i), ready to feed straight into an FPN.
     """
     tokens, H, W = model.patch_embed(x)
     tokens = model.pos_drop(tokens)
@@ -124,7 +136,12 @@ def swin_spatial_map(model, x):
 
 class ViTFeaturePyramidbackboneAdapter(nn.Module):
     """
-    Explain what is going on and why
+    ViT has no hierarchy -- just one stride-16 grid of patch tokens. This resamples that
+    single feature map to strides {4,8,16,32} with a small conv/deconv stack per level
+    (ViTDet's "simple feature pyramid"), then fuses those 4 same-channel maps with a
+    standard FPN (+ an extra max-pooled 'pool' level), producing the same 5-level,
+    256-channel-per-level output torchvision's fasterrcnn_resnet50_fpn backbone produces
+    -- which is what lets the pretrained RPN/box head weights drop in unmodified.
     """
     def __init__(self, model, out_channels=FPN_OUT_CHANNELS):
         super().__init__()
@@ -159,7 +176,9 @@ class ViTFeaturePyramidbackboneAdapter(nn.Module):
 
 class SwinFeaturePyramidbackboneAdapter(nn.Module):
     """
-    Explain what is going on and why
+    Swin's 4 stages sit naturally at strides 4/8/16/32 -- same as a ResNet's C2-C5 -- so
+    they're fed directly into a standard FPN (+ extra 'pool' level), again matching
+    fasterrcnn_resnet50_fpn's backbone output exactly.
     """
     def __init__(self, model, out_channels=FPN_OUT_CHANNELS):
         super().__init__()
@@ -200,7 +219,12 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
         )
         return SwinFeaturePyramidbackboneAdapter(swin)
 
-def combine_backbone_detection_head(arch_type, backbone_checkpoint_path, detection_head_checkpoint_path, num_classes, backbone_checkpoint_key='student', in_chans=1, **backbone_arch_kwargs):
+    else:
+        raise ValueError(f"arch_type must be 'vit' or 'swin', got {arch_type!r}")
+
+def combine_backbone_detection_head(arch_type, backbone_checkpoint_path, detection_head_checkpoint_path,
+                                    num_classes, backbone_checkpoint_key='student', in_chans=1,
+                                    **backbone_arch_kwargs):
     backbone = load_adapted_model(
         arch_type,
         backbone_checkpoint_path,
