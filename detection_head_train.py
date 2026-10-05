@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--patch_size", type=int, default=None, help="Defaults to 16 for vit, 4 for swin.")
     parser.add_argument("--window_size", type=int, default=7, help="Swin only.")
     parser.add_argument("--in_chans", type=int, default=1)
+    parser.add_argument('--lora_level', default=None, type=str, choices=['subtle', 'heavy'],  help='Lora config to use, subtle or heavy lora modification')
     # parser.add_argument("--image_dir", default="datasets/SARDet_100K/JPEGImages/train_val")
     # parser.add_argument("--annotation_file", default="datasets/SARDet_100K/Annotations/train_val.json")
     parser.add_argument("--batch_size", type=int, default=8)
@@ -87,6 +88,7 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
+        lora_level=args.lora_level
     )
 
     frozen_adapted_backbone = adapted_backbone.model

@@ -128,7 +128,7 @@ def get_args_parser():
 
     # loRA
     parser.add_argument('--use_lora', default=True, type=utils.bool_flag, help='Whether to use LoRa for fine-tuning or not')
-    parser.add_argument('--lora_level', default=None, type=str, choices=['subtle', 'heavy'],  help='Whether to use LoRa for fine-tuning or not')
+    parser.add_argument('--lora_level', default=None, type=str, choices=['subtle', 'heavy'],  help='Lora config to use, subtle or heavy lora modification')
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
@@ -264,8 +264,8 @@ def train_dino(args):
                     r=64,
                     lora_alpha=128,
                     lora_dropout=0.1,
-                    target_modules="all-linear",  # Automatically targets all linear layers in ViT or Swin!
-                    bias="all",
+                    target_modules=target_models,
+                    bias="none",
                 )
     
             student = get_peft_model(student, lora_config)

@@ -119,6 +119,7 @@ def main():
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--score_threshold", type=float, default=0.05)
     parser.add_argument("--viz_sample_rate", type=float, default=0.10, help="Fraction of images (0.10 = 10%) to output with GT/Pred overlay.")
+    parser.add_argument('--lora_level', default=None, type=str, choices=['subtle', 'heavy'],  help='Lora config to use, subtle or heavy lora modification')
     args = parser.parse_args()
 
     output_dir = args.backbone_checkpoint.split('\\')[-1]
@@ -164,7 +165,8 @@ def main():
         arch=arch,
         patch_size=patch_size,
         window_size=args.window_size,
-        num_classes=NUM_CLASSES
+        num_classes=NUM_CLASSES,
+        lora_level=args.lora_level
     )
     model.to(device)
 
