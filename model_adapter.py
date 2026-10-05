@@ -9,14 +9,23 @@ from collections import OrderedDict
 import vision_transformer as vits
 import swin_transformer as swins
 
-def lora_config():
-    return LoraConfig(
-        r=16,
-        lora_alpha=32,
-        lora_dropout=0.05,
-        target_modules=["qkv", "proj"],
-        bias="none"
-    )
+def lora_config(lora_level):
+    if lora_level == 'subtle':
+        return LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            target_modules=["qkv", "proj"],
+            bias="none"
+        )
+    elif lora_level == 'heavy':
+        return LoraConfig(
+            r=64,
+            lora_alpha=128,
+            lora_dropout=0.1,
+            target_modules=["qkv", "proj", "fc1", "fc2", "reduction"],
+            bias="none",
+        )
 
 FPN_OUT_CHANNELS = 256
 
@@ -59,7 +68,7 @@ def load_model(model, backbone, lora_state):
 
     return model
 
-def load_vit_backbone(checkpoint_path, arch, patch_size, in_chans, key='student'):
+def load_vit_backbone(checkpoint_path, arch, patch_size, in_chans, key='student', lora_level="heavy"):
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     backbone, lora_state = extract_backbone(checkpoint, key)
 
@@ -68,11 +77,11 @@ def load_vit_backbone(checkpoint_path, arch, patch_size, in_chans, key='student'
         in_chans=in_chans
     )
 
-    model = load_model(model, backbone, lora_state)
+    model = load_model(model, backbone, lora_state, lora_level)
 
     return model
 
-def load_swin_backbone(checkpoint_path, arch, patch_size, window_size, in_chans, key='student'):
+def load_swin_backbone(checkpoint_path, arch, patch_size, window_size, in_chans, key='student', lora_level="heavy"):
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     backbone, lora_state = extract_backbone(checkpoint, key)
 
@@ -83,7 +92,7 @@ def load_swin_backbone(checkpoint_path, arch, patch_size, window_size, in_chans,
         use_dense_prediction=True
     )
 
-    model = load_model(model, backbone, lora_state)
+    model = load_model(model, backbone, lora_state, lora_level)
 
     return model
 
@@ -198,7 +207,7 @@ class SwinFeaturePyramidbackboneAdapter(nn.Module):
 
         return self.fpn(levels)
 
-def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='student', **arch_kwargs):
+def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='student', lora_level='heavy', **arch_kwargs):
     if arch_type == "vit":
         vit = load_vit_backbone(
             checkpoint_path=checkpoint_path,
@@ -206,6 +215,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             patch_size=arch_kwargs.get("patch_size", 16),
             in_chans=in_chans,
             key=checkpoint_key,
+            lora_level=lora_level
         )
         return ViTFeaturePyramidbackboneAdapter(vit)
 
@@ -217,6 +227,7 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
             in_chans=in_chans,
             window_size=arch_kwargs.get("window_size", 7),
             key=checkpoint_key,
+            lora_level=lora_level
         )
         return SwinFeaturePyramidbackboneAdapter(swin)
 
@@ -224,13 +235,14 @@ def load_adapted_model(arch_type, checkpoint_path, in_chans=1, checkpoint_key='s
         raise ValueError(f"arch_type must be 'vit' or 'swin', got {arch_type!r}")
 
 def combine_backbone_detection_head(arch_type, backbone_checkpoint_path, detection_head_checkpoint_path,
-                                    num_classes, backbone_checkpoint_key='student', in_chans=1,
+                                    num_classes, backbone_checkpoint_key='student', in_chans=1, lora_level='heavy',
                                     **backbone_arch_kwargs):
     backbone = load_adapted_model(
         arch_type,
         backbone_checkpoint_path,
         in_chans=in_chans,
         checkpoint_key=backbone_checkpoint_key,
+        lora_level=lora_level
         **backbone_arch_kwargs
     )
 
