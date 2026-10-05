@@ -107,7 +107,6 @@ def test(model, data_loader, device, label_to_category_id, output_dir, score_thr
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate a DINO ViT/Swin + Faster R-CNN model on SARDet-100K.")
-    parser.add_argument("--model_name", type=str, required=True, help="Name of model run (e.g. vit_small_dino). Used for results folder structure.")
     parser.add_argument("--model_type", required=True, choices=["vit", "swin"])
     parser.add_argument("--backbone_checkpoint", required=True)
     parser.add_argument("--detection_head_checkpoint", required=True)
@@ -122,8 +121,7 @@ def main():
     parser.add_argument("--viz_sample_rate", type=float, default=0.10, help="Fraction of images (0.10 = 10%) to output with GT/Pred overlay.")
     args = parser.parse_args()
 
-    # Dynamic directory output setup: results/_model_being_ran_/
-    output_dir = os.path.join("results", args.model_name)
+    output_dir = os.path.join("results", args.backbone_checkpoint.strip('.')[0])
     os.makedirs(output_dir, exist_ok=True)
 
     arch = args.arch or ("vit_small" if args.model_type == "vit" else "swin_tiny")
