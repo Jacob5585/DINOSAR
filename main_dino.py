@@ -128,6 +128,7 @@ def get_args_parser():
 
     # loRA
     parser.add_argument('--use_lora', default=True, type=utils.bool_flag, help='Whether to use LoRa for fine-tuning or not')
+    parser.add_argument('--lora_level', default=None, type=str, choices=['subtle', 'heavy'],  help='Whether to use LoRa for fine-tuning or not')
 
     # Multi-crop parameters
     parser.add_argument('--global_crops_scale', type=float, nargs='+', default=(0.4, 1.),
@@ -246,19 +247,39 @@ def train_dino(args):
 
     if args.use_lora:
             # target_models = ["qkv"] if "vit" in args.arch or "deit" in args.arch else ["query", "value"]
-            target_models = ["qkv", "proj"]
             # target_modules = ["qkv", "proj", "fc1", "fc2"]
     
-            lora_config = LoraConfig(
-                r = 16,
-                lora_alpha=32,
-                lora_dropout=0.05,
-                target_modules=target_models,
-                bias="none"
-            )
+            if args.lora_level == 'subtle':
+                target_models = ["qkv", "proj"]
+                lora_config = LoraConfig(
+                    r = 16,
+                    lora_alpha=32,
+                    lora_dropout=0.05,
+                    target_modules=target_models,
+                    bias="none"
+                )
+            elif args.lora_level == 'heavy':
+                target_models = ["qkv", "proj", "fc1", "fc2", "reduction"]
+                lora_config = LoraConfig(
+                    r=64,
+                    lora_alpha=128,
+                    lora_dropout=0.1,
+                    target_modules="all-linear",  # Automatically targets all linear layers in ViT or Swin!
+                    bias="all",
+                )
     
             student = get_peft_model(student, lora_config)
             teacher = get_peft_model(teacher, lora_config)
+
+            if args.lora_level == 'heavy':
+                for name, param in student.named_parameters():
+                    if "patch_embed" in name:
+                        param.requires_grad = True
+
+                for name, param in teacher.named_parameters():
+                    if "patch_embed" in name:
+                        param.requires_grad = True
+
             teacher.load_state_dict(student.state_dict())
 
             # for name, module in student.named_modules():
