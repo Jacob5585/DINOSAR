@@ -121,7 +121,10 @@ def main():
     parser.add_argument("--viz_sample_rate", type=float, default=0.10, help="Fraction of images (0.10 = 10%) to output with GT/Pred overlay.")
     args = parser.parse_args()
 
-    output_dir = os.path.join("results", args.backbone_checkpoint.strip('.')[0])
+    output_dir = args.backbone_checkpoint.split('\\')[-1]
+    output_dir = output_dir.split('.')[0]
+    output_dir = output_dir.replace('checkpoint_', '')
+    output_dir = os.path.join("results", )
     os.makedirs(output_dir, exist_ok=True)
 
     arch = args.arch or ("vit_small" if args.model_type == "vit" else "swin_tiny")
