@@ -1,0 +1,4 @@
+datasets
+output_dir_reg_vit/*
+output_dir_swin/*
+__pycache__
